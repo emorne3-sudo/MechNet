@@ -1,0 +1,47 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: "*" } 
+});
+
+// 1. AI CONFIGURATION (MechBot)
+// This uses the API Key you will set up in Render
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+app.post("/ask-mechbot", async (req, res) => {
+    try {
+        const { question } = req.body;
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `You are MechBot, a Senior Master Mechanic. Answer this technical question shortly and professionally: ${question}`;
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        res.send({ answer: response.text() });
+    } catch (error) {
+        res.status(500).send({ answer: "MechBot is offline. Check connection." });
+    }
+});
+
+// 2. LIVE CHAT LOGIC
+io.on('connection', (socket) => {
+    console.log('Mechanic connected');
+
+    socket.on('share_knowledge', (data) => {
+        // Broadcasts the machine fix to everyone else online
+        io.emit('receive_knowledge', data);
+    });
+});
+
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+    console.log(`MechNet Engine running on port ${PORT}`);
+});
