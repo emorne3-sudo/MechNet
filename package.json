@@ -1,0 +1,45 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const path = require('path'); // Added this
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// This line tells the server to show your index.html file
+app.use(express.static(path.join(__dirname, '.')));
+
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: "*" } 
+});
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "no-key");
+
+app.post("/ask-mechbot", async (req, res) => {
+    try {
+        const { question } = req.body;
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `You are MechBot, a Senior Master Mechanic. Answer this technical question shortly: ${question}`;
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        res.send({ answer: response.text() });
+    } catch (error) {
+        res.status(500).send({ answer: "MechBot is offline. Check connection." });
+    }
+});
+
+io.on('connection', (socket) => {
+    socket.on('share_knowledge', (data) => {
+        io.emit('receive_knowledge', data);
+    });
+});
+
+// Render likes port 10000 or the environment port
+const PORT = process.env.PORT || 10000; 
+server.listen(PORT, () => {
+    console.log(`MechNet Engine running on port ${PORT}`);
+});
